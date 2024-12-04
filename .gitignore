@@ -1,0 +1,7 @@
+# ignore build files
+
+build/
+
+# ignore CMake files
+
+CMakeFiles/
