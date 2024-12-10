@@ -5,3 +5,11 @@ build/
 # ignore CMake files
 
 CMakeFiles/
+
+# ignore ninja build files
+
+.ninja*
+
+# Ignore swp files
+
+*.swp
