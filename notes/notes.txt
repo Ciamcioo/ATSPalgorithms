@@ -1,0 +1,8 @@
+Poprawny rezultat ftv55.atsp: 1608
+Mój rezultat dla ftv55.atsp: 1948
+
+Poprawny rezultat ftv170.atsp: 2755 
+Mój rezultat dla ftv170.atsp: 3582
+
+Poprawny rezultat ftv170.atsp: 1163 
+Mój rezultat dla ftv55.atsp: 1702

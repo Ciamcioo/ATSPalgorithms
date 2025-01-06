@@ -1,3 +1,13 @@
+/**
+ * Main Application for Solving ATSP
+ * ----------------------------------
+ * This application solves the Asymmetric Traveling Salesman Problem (ATSP) using
+ * three algorithms: Greedy Algorithm, Tabu Search, and Simulated Annealing. Users
+ * can interact via a menu interface to load data, configure parameters, execute
+ * algorithms, and save results.
+ */
+
+
 #include <iostream>
 #include <vector>
 #include <fstream>
@@ -6,270 +16,382 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "Option.h"
-#include "Neighbors.h"
+#include "../headers/Option.h"
+#include "../headers/TabuSearch.h"
+#include "../headers/GreedyAlgorithm.h"
+#include "../headers/SimulatedAnnealing.h"
 
 
-void mainMenu();
-void printMainMenu();
-Option validateInput(std::string str_input);
-int convertStringToInt(std::string input);
-void buttonPress();
-void clearTerminal();
-void performAction(Option option_input);
-std::vector<std::vector<int>> loadMatrixFromFile(std::string path);
-std::string trim(const std::string& str);
-void setMaxTimeRun(int minutes);
-void setNeightborChoosingSystem(std::string input);
-void setTemperatureChangeFactor(float tmp);
 
-std::vector<std::vector<int>> matrix;
-int  max_run_time_minutes = 5;
-Neighbors neighbors_chosing_system = Neighbors::RANDOM;
-float temp_change_factor = 0.85;
+/**
+ * Global Variables
+ * ----------------
+ * distanceMatrix : A 2D vector storing the adjacency matrix for the ATSP.
+ * maxRunTime : Maximum computation time for algorithms in seconds (default: 60 seconds).
+ * temperatureChangeFactor : Cooling rate for Simulated Annealing (default: 0.85).
+ * greedySolver : Pointer to an instance of the GreedyAlgorithm class.
+ * tabuSolver : Pointer to an instance of the TabuSearch class.
+ * simulatedAnnealingSolver : Pointer to an instance of the SimulatedAnnealing class.
+ * resultsFilePath : Default path to save results ("results.txt").
+ */
+std::vector<std::vector<int>> distanceMatrix;
+long maxRunTime = 60L; // Default run time in seconds
+float temperatureChangeFactor = 0.85;
+
+GreedyAlgorithm* greedySolver = nullptr;
+TabuSearch* tabuSolver = nullptr;
+SimulatedAnnealing* simulatedAnnealingSolver = nullptr;
+
+std::string resultsFilePath = "/home/ciamcio/workspace/cppPrograming/ATSPalgorithms/results.txt";
 
 
-int main(int, char**) {
-  mainMenu();
-}    
+// Function Declarations
+void displayMainMenu();
+Option validateInput(const std::string& input);
+int convertStringToInt(const std::string& input);
+void handleMenuOption(Option selectedOption);
+void pressEnterToContinue();
+void clearScreen();
 
-void mainMenu() {
-  std::string str_input;
-  Option option_input;
+std::vector<std::vector<int>> loadMatrixFromFile(const std::string& path);
 
-  do {
-    printMainMenu();
-    std::getline(std::cin, str_input);
-    option_input = validateInput(str_input);
-    performAction(option_input);
-    buttonPress();
-    clearTerminal();
-  } while(option_input != Option::EXIT);
+void setMaxRunTime(long seconds);
+void setTemperatureChangeFactor(float factor);
+void loadCostTable();
 
+/**
+ * Main Function
+ * -------------
+ * Loops indefinitely, displaying a menu to the user. Handles user input
+ * and invokes appropriate methods based on menu selection.
+ */
+int main() {
+    while (true) {
+        displayMainMenu();
+        std::string inputString;
+        std::getline(std::cin, inputString);
+        Option selectedOption = validateInput(inputString);
+        if (selectedOption == Option::EXIT) break;
+        handleMenuOption(selectedOption);
+        pressEnterToContinue();
+        clearScreen();
+    }
+    return 0;
 }
 
-void printMainMenu() {
-  std::cout << "Aplication solving ATSP Problem using Tabu Search and Simulated Annealing problem\n";  
-  std::cout << "1. Load datat set\n";
-  std::cout << "2. Set maximum time for calculation - stop criterion\n";
-  std::cout << "3. Solve problem using Greedy Algorihtm\n";
-  std::cout << "4. Define neighbors for Tabu Search\n";
-  std::cout << "5. Solve problem using Tabu Search Algorihtm\n";
-  std::cout << "6. Set temperatur change factor\n";
-  std::cout << "7. Solve problem using Simulated Annealing\n";
-  std::cout << "8. Save results to file\n";
-  std::cout << "9. Load cost tabels\n"; 
-  std::cout << "10. Exit\n";
-  std::cout << "Provide number representing the menu option: ";
-  return; 
+/**
+ * Displays the main menu options to the console.
+ */
+void displayMainMenu() {
+    std::cout << "Application solving the ATSP problem using Tabu Search and Simulated Annealing\n";
+    std::cout << "1. Load dataset\n";
+    std::cout << "2. Set maximum calculation time (stop criterion)\n";
+    std::cout << "3. Solve problem using Greedy Algorithm\n";
+    std::cout << "4. Solve problem using Tabu Search\n";
+    std::cout << "5. Set temperature change factor for Simulated Annealing\n";
+    std::cout << "6. Solve problem using Simulated Annealing\n";
+    std::cout << "7. Save results to file\n";
+    std::cout << "8. Load cost tables\n";
+    std::cout << "0. Exit\n";
+    std::cout << "Enter the number corresponding to your choice: ";
 }
 
-Option validateInput(std::string str_input) {
-  int input = convertStringToInt(str_input);
-  switch (input) {
-    case 1: { return Option::LOAD_DATA; }
-    case 2: { return Option::STOP_CRITERION; }
-    case 3: { return Option::GREEDY_ALGORITHM; }
-    case 4: { return Option::DEFINE_NEIGHBOR_TS; }
-    case 5: { return Option::RUN_TABU_SEARCH; }
-    case 6: { return Option::SET_TEMP_CHANGE_FACTOR; }
-    case 7: { return Option::RUN_SIMULATED_ANNEALING; }
-    case 8: { return Option::SAVE_TO_FILE; }
-    case 9: { return Option::LOAD_COST_TABELS; }
-    case 10: { return Option::EXIT; }
-    default: { return Option::INVALID_INPUT; }
-  }
+/**
+ * Converts user input into an Option enum. Returns Option::INVALID_INPUT for invalid entries.
+ * @param input - The user input as a string.
+ * @return The corresponding Option enum value.
+ */
+Option validateInput(const std::string& input) {
+    int option = convertStringToInt(input);
+    switch (option) {
+        case 1: return Option::LOAD_DATA;
+        case 2: return Option::STOP_CRITERION;
+        case 3: return Option::GREEDY_ALGORITHM;
+        case 4: return Option::RUN_TABU_SEARCH;
+        case 5: return Option::SET_TEMP_CHANGE_FACTOR;
+        case 6: return Option::RUN_SIMULATED_ANNEALING;
+        case 7: return Option::SAVE_TO_FILE;
+        case 8: return Option::LOAD_COST_TABELS;
+        case 0: return Option::EXIT;
+        default: return Option::INVALID_INPUT;
+    }
 }
 
-void performAction(Option option) {
-  switch (option) {
+/**
+ * Executes the functionality corresponding to the user's menu choice.
+ * @param selectedOption - The selected menu option.
+ */
+void handleMenuOption(Option selectedOption) {
+    switch (selectedOption) {
 
-      case Option::LOAD_DATA: { 
-                                  std::string path_to_file = "";
-                                  std::cout << "Provide path to file: ";
-                                  std::cin >> path_to_file;
-                                  matrix = loadMatrixFromFile(path_to_file);
-                                  break;
-                              }
-       
+        case Option::LOAD_DATA: {
+            std::string filePath;
+            std::cout << "Enter the path to the data file: ";
+            std::cin >> filePath;
+            try {
+                distanceMatrix = loadMatrixFromFile(filePath);
+                std::cout << "Data loaded successfully.\n";
+                std::cout << "Matrix size: " << distanceMatrix.size() << " x " << distanceMatrix.size() << "\n";
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << std::endl;
+            }
+            break;
+        }
 
-     case Option::STOP_CRITERION: {
-                                      std::string input = "";
-                                      std::cout << "Provide number of minutes to set for stop criterion: ";
-                                      std::cin >> input
-                                      int minutes = convertStringToInt(input);
-                                      setMaxTimeRun(minutes);
-                                      break;
-                                  }
-      
+        case Option::STOP_CRITERION: {
+            std::string input;
+            std::cout << "Enter the maximum calculation time (in seconds): ";
+            std::cin >> input;
+            int seconds = convertStringToInt(input);
+            setMaxRunTime(seconds);
+            std::cout << "Stop criterion set to " << maxRunTime << " seconds.\n";
+            break;
+        }
 
-     case Option::GREEDY_ALGORITHM: {
-                                        break;
-      
-                                        
-                                    }
+        case Option::GREEDY_ALGORITHM: {
+            if (distanceMatrix.empty()) {
+                std::cerr << "Error: Distance matrix is empty.\n";
+                break;
+            }
+            if (greedySolver) delete greedySolver;
+            greedySolver = new GreedyAlgorithm(distanceMatrix);
+            greedySolver->solve();
+            std::cout << "Greedy Algorithm Results:\n";
+            std::cout << "Number of vertices: " << greedySolver->getMatrixSize() << "\n";
+            std::cout << "Best cost: " << greedySolver->getBestCost() << "\n";
+            std::cout << "Best tour: ";
+            for (int city : greedySolver->getBestTour()) {
+                std::cout << city << " ";
+            }
+            std::cout << std::endl;
+            break;
+        }
 
-    case Option::DEFINE_NEIGHBOR_TS: {
-                                         std::string input = "";
-                                         std::cout << "Define how you would like to choose neighbors in Tabu Search Algorithm\n";
-                                         std::cout << "1. Randomly selecting neighbors\n"; 
-                                         std::cout << "2. Greedy choice of neighbors\n";
-                                         std::cout << "3. Probalistic neighbor selection\n";
-                                         std::cout << "Provide number related to the option (if the number will not match any option, first option will be choose): ";
-                                         std::cin >> input;
-                                         neighbors_chosing_system  = setNeightborChoosingSystem(input);
-                                         break;
-                                      }
+        case Option::RUN_TABU_SEARCH: {
+            if (distanceMatrix.empty()) {
+                std::cerr << "Error: Distance matrix is empty.\n";
+                break;
+            }
+            if (tabuSolver) delete tabuSolver;
+            tabuSolver = new TabuSearch(distanceMatrix, 2, maxRunTime);
+            tabuSolver->solve();
+            std::cout << "Tabu Search Results:\n";
+            std::cout << "Best cost: " << tabuSolver->getOptimalCost() << "\n";
+            std::cout << "Best tour: ";
+            for (int city : tabuSolver->getOptimalSolution()) {
+                std::cout << city << " ";
+            }
+            std::cout << std::endl;
+            std::cout << "Tiem stamp when found: " << tabuSolver->getBestTourTimestamp();
+            break;
+        }
 
-    case Option::RUN_TABU_SEARCH: {
-                                      break;
+        case Option::SET_TEMP_CHANGE_FACTOR: {
+            float factor;
+            std::cout << "Enter temperature change factor (0.8 - 0.99 recommended): ";
+            std::cin >> factor;
+            setTemperatureChangeFactor(factor);
+            std::cout << "Temperature change factor set to " << temperatureChangeFactor << ".\n";
+            break;
+        }
 
-                                  }
-    
-    case Option::SET_TEMP_CHANGE_FACTOR: {
-                                             float tmp_temp_change_factor = 0.85;
-                                             std::cout << "Specifie the temperature change factor (properly set temperatur change factor should be in range from 0.8 to 0.99)\n";
-                                             std::cout << "WARNING! If provided number will be out of range <0.0, 1.0> it will be set to 0.85 by default\n";
-                                             std::cout << "Provide temperature change factor: ";
-                                             std::cin >> tmp_temp_change_factor;
-                                             setTemperatureChangeFactor(tmp_temp_change_factor);
-                                             break;
-                                         }                                  
+        case Option::RUN_SIMULATED_ANNEALING: {
+            if (distanceMatrix.empty()) {
+                std::cerr << "Error: Distance matrix is empty.\n";
+                break;
+            }
+            if (simulatedAnnealingSolver) delete simulatedAnnealingSolver;
+            simulatedAnnealingSolver = new SimulatedAnnealing(distanceMatrix, temperatureChangeFactor, maxRunTime);
+            simulatedAnnealingSolver->solve();
+            std::cout << "Best cost: " << simulatedAnnealingSolver->getBestCost() << "\n";
+            std::cout << "Best tour: ";
+            for (int city : simulatedAnnealingSolver->getBestSolution()) {
+                std::cout << city << " ";
+            }
+            std::cout << std::endl;
+            std::cout << "Tiem stamp when found: " << simulatedAnnealingSolver->getBestSolutionTimestamp() << std::endl; 
+            break;
+        }
 
-    case Option::RUN_SIMULATED_ANNEALING: {
-                                              break;
-                                          }
-    case Option::SAVE_TO_FILE: {
-                                   break;
-                               }
+        case Option::SAVE_TO_FILE: {
+            if (greedySolver) greedySolver->saveResultToFile(resultsFilePath);
+            if (tabuSolver) tabuSolver->saveResultsToFile(resultsFilePath);
+            std::cout << "Results saved to " << resultsFilePath << ".\n";
+            break;
+        }
 
-    case Option::LOAD_COST_TABELS: {
-                                       // TODO load matrix and then the path and based on that calculate the cost and print it out to the user
+        case Option::LOAD_COST_TABELS: {
+            loadCostTable();
+            break;
+        }
 
-        
-                                       break;
-                                   }
+        case Option::INVALID_INPUT:
+            std::cerr << "Invalid input. Please try again.\n";
+            break;
 
-    case Option::INVALID_INPUT: {
-                                    std::cout << "Provided option is invalid" << std::endl;
-                                    break;
-                                }
-                                    
-
-    
-
-  }
+        default:
+            break;
+    }
 }
 
-std::string trim(const std::string& str) {
-    size_t start = str.find_first_not_of(" \t\n\r");
-    size_t end = str.find_last_not_of(" \t\n\r");
-    return (start == std::string::npos) ? "" : str.substr(start, end - start + 1);
-}
-
-std::vector<std::vector<int>> loadMatrixFromFile(std::string filePath) { 
+/**
+ * Loads the adjacency matrix from a specified file. The file must follow the ATSP format.
+ * @param filePath - The path to the file containing the matrix data.
+ * @return The loaded matrix as a 2D vector.
+ */
+std::vector<std::vector<int>> loadMatrixFromFile(const std::string& filePath) {
     std::ifstream file(filePath);
-
     if (!file.is_open()) {
-        throw std::runtime_error("Could not open file: " + filePath);
+        throw std::runtime_error("Error: Unable to open file " + filePath);
     }
 
     std::string line;
+    std::vector<int> weights;
     int dimension = 0;
-    std::string edgeWeightFormat;
-    std::vector<int> edgeWeights;
-    bool readingWeights = false;
 
     while (std::getline(file, line)) {
-        line = trim(line);
-
-        if (line.empty()) continue;
-
         if (line.find("DIMENSION") != std::string::npos) {
             dimension = std::stoi(line.substr(line.find(":") + 1));
-        } else if (line.find("EDGE_WEIGHT_FORMAT") != std::string::npos) {
-            edgeWeightFormat = trim(line.substr(line.find(":") + 1));
-            std::transform(edgeWeightFormat.begin(), edgeWeightFormat.end(), edgeWeightFormat.begin(), ::toupper); // Convert to uppercase
         } else if (line.find("EDGE_WEIGHT_SECTION") != std::string::npos) {
-            readingWeights = true;
-        } else if (line == "EOF") {
             break;
-        } else if (readingWeights) {
+        }
+    }
+
+    while (std::getline(file, line)) {
+        if (line == "EOF") break;
+        std::istringstream iss(line);
+        int weight;
+        while (iss >> weight) {
+            weights.push_back(weight);
+        }
+    }
+
+    std::vector<std::vector<int>> matrix(dimension, std::vector<int>(dimension));
+    for (int i = 0; i < dimension; ++i) {
+        for (int j = 0; j < dimension; ++j) {
+            matrix[i][j] = weights[i * dimension + j];
+        }
+    }
+    return matrix;
+}
+
+/**
+ * Converts a string to an integer. Returns 0 for invalid inputs.
+ * @param input - The string input to convert.
+ * @return The integer value of the input.
+ */
+int convertStringToInt(const std::string& input) {
+    try {
+        return std::stoi(input);
+    } catch (...) {
+        return 0;
+    }
+}
+
+/**
+ * Loads a cost table from the results file and calculates the tour cost.
+ * Ensures the data matches the loaded distance matrix.
+ */
+void loadCostTable() {
+    if (distanceMatrix.empty()) {
+        std::cerr << "Error: Distance matrix is not loaded. Please load a dataset first.\n";
+        return;
+    }
+
+    std::ifstream inFile(resultsFilePath);
+    if (!inFile.is_open()) {
+        std::cerr << "Error: Could not open file " << resultsFilePath << " for reading.\n";
+        return;
+    }
+
+    std::string line;
+    int numberOfVertices = 0;
+    std::vector<int> tour;
+
+    try {
+        if (std::getline(inFile, line)) {
+            line.erase(std::remove(line.begin(), line.end(), '\r'), line.end()); 
+            numberOfVertices = std::stoi(line);
+        } else {
+            throw std::runtime_error("Error: File format is invalid. Missing number of vertices.");
+        }
+
+        if (std::getline(inFile, line)) {
+            line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
             std::istringstream iss(line);
-            int weight;
-            while (iss >> weight) {
-                edgeWeights.push_back(weight);
+            int vertex;
+            while (iss >> vertex) {
+                tour.push_back(vertex);
             }
+        } else {
+            throw std::runtime_error("Error: File format is invalid. Missing tour information.");
         }
-    }
 
-    file.close();
+        inFile.close();
 
-    if (edgeWeightFormat == "FULL_MATRIX") {
-        std::vector<std::vector<int>> weightMatrix(dimension, std::vector<int>(dimension));
-        for (int i = 0; i < dimension; ++i) {
-            for (int j = 0; j < dimension; ++j) {
-                weightMatrix[i][j] = edgeWeights[i * dimension + j];
+        if (numberOfVertices != static_cast<int>(distanceMatrix.size())) {
+            throw std::runtime_error("Error: Number of vertices in the file does not match the loaded distance matrix.");
+        }
+        if (tour.empty()) {
+            throw std::runtime_error("Error: Tour information is missing or invalid in the file.");
+        }
+
+        int totalCost = 0;
+        for (size_t i = 0; i < tour.size() - 1; ++i) {
+            if (tour[i] >= numberOfVertices || tour[i + 1] >= numberOfVertices) {
+                throw std::runtime_error("Error: Invalid vertex in the tour.");
             }
+            totalCost += distanceMatrix[tour[i]][tour[i + 1]];
         }
-        return weightMatrix;
-    } else {
-        throw std::runtime_error("Unsupported EDGE_WEIGHT_FORMAT: " + edgeWeightFormat);
+        totalCost += distanceMatrix[tour[distanceMatrix.size()-1]][tour[0]];
+
+        std::cout << "Loaded Tour Cost: " << totalCost << "\n";
+        std::cout << "Tour: ";
+        for (int vertex : tour) {
+            std::cout << vertex << " ";
+        }
+        std::cout << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
     }
 }
 
-void setMaxTimeRun(int minutes) {
-  if (minutes < 0 || minutes > 300) { 
-    max_run_time_minutes= 5
-  } else {
-    max_run_time_minutes = minutes;
-  }
+/**
+ * Sets the maximum runtime for algorithms.
+ * Ensures the value is within the range [1, 36000].
+ * @param seconds - Maximum runtime in seconds.
+ */
+void setMaxRunTime(long seconds) {
+    maxRunTime = (seconds > 0 && seconds <= 36000) ? seconds : 60;
 }
 
-void setNeightborChoosingSystem(std::string input) {
-    int number = convertStringToInt(input);
-    
-    switch (number) {
-        case 1: { neighbors_chosing_system = Neighbors::RANDOM; }
-        case 2: { neighbors_chosing_system = Neighbors::GREEDY; }
-        case 3: { neighbors_chosing_system = Neighbors::PROBALISTIC; }
-        default: { neighbors_chosing_system = Neighbors::RANDOM; }
-    }
+/**
+ * Sets the cooling factor for Simulated Annealing.
+ * Ensures the value is within the range [0.8, 0.99].
+ * @param factor - Cooling factor.
+ */
+void setTemperatureChangeFactor(float factor) {
+    temperatureChangeFactor = (factor >= 0.8 && factor < 1) ? factor : 0.85;
 }
 
-void setTemperatureChangeFactor(float tmp) {
-    if (tmp < 0.0 || tmp >= 1.0) {
-        temp_change_factor = 0.85;
-    } else {
-        temp_change_factor = tmp_temp_change_factor;
-    }
+/**
+ * Waits for the user to press "Enter" to continue.
+ */
+void pressEnterToContinue() {
+    std::cin.ignore();
+    std::cout << "Press Enter to continue..." << std::endl;
+    std::cin.get();
 }
 
-
-int convertStringToInt(std::string str_input) {
-  int input = 0;
-  try {
-    input = std::stoi(str_input); 
-  } catch (const std::invalid_argument& e) {
-    std::cout << "Invalid input arguemnt\n";
-  } catch(const std::out_of_range& e) {
-    std::cout << "Argument out of range\n";
-  } 
-  return input;
-}
-
-void buttonPress() {
-  std::cin.ignore();
-  std::cout << "Press Enter to clear the terminal..." << std::endl;
-  std::cin.get();
-  return;
-}
-
-void clearTerminal() {
-  #ifdef _WIN32
+/**
+ * Clears the console window. Works across platforms.
+ */
+void clearScreen() {
+#ifdef _WIN32
     std::system("cls");
-  #else
+#else
     std::system("clear");
-  #endif
-  return;
+#endif
 }
+
